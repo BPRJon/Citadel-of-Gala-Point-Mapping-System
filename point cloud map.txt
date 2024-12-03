@@ -1,0 +1,57 @@
+--@name Citadel of Gala Point Mapping System
+--@author jon b
+--@shared
+--@model models/spacecode/sfchip.mdl
+--[[
+mdl models/props_junk/plasticbucket001a.mdl
+mat !models/props_debris/metalwall001a+1+1+0+0+0+0+1
+]]
+
+if SERVER then
+    Origin = Vector()
+    Radomes = find.byModel("models/props_junk/plasticbucket001a.mdl",function(e) return e:getMaterial() == "!models/props_debris/metalwall001a+1+1+0+0+0+0+1" end)
+    CitadelProps = find.byClass("prop_physics",function(e) return e:getOwner() == owner() end)
+    Screen = chip():getLinkedComponents()[1]
+    
+    for i,v in pairs(Radomes) do Origin = Origin + v:getPos() if i == table.count(Radomes) then Origin = Origin / i net.start("Origin") net.writeVector(Origin) net.send() end end
+        
+    timer.create("Citadel-Radar-Sweep",3,0,function()
+        net.start("Radar Sweep")
+        net.writeTable(find.inBox(Origin-Vector(10240),Origin+Vector(10240),function(e) return e:getClass() == "player" or e:getClass() == "prop_physics" end))
+        net.send()
+        end)
+-----------------------------------------------------------------------------------------------------------------------------------
+elseif CLIENT then
+    local Origin = chip():getPos()
+    net.receive("Origin",function() Origin = net.readVector() end)
+    local entPositions = {}
+    classes = {
+        ["player"] = Color(50,255,50),
+        ["prop_physics"] = Color(255,50,50)
+    }
+    net.receive("Radar Sweep",function()
+        entPositions = {}
+        for _,v in pairs(net.readTable()) do
+            if isValid(v) then
+                local pos = (v:getPos()-Origin)/10 + Vector(512)
+                if v == player() then clr = Color(50,50,255) else clr = classes[v:getClass()] end
+                table.insert(entPositions,{pos,clr})
+            end
+        end
+    end)
+    local letters = {"A","B","C","D","E","F","G","H","I"}
+    render.createRenderTarget("radar-screen-table")
+    hook.add("render","radar-screen",function()
+        render.selectRenderTarget("radar-screen-table")
+        render.clear()
+        for x=1,9 do render.drawLine(x*114,0,x*114,1024) end
+        for y=1,9 do render.drawLine(0,y*114,1024,y*114) end
+        for x=1,9 do for y=1,9 do render.drawSimpleText(x*114-57,y*114-57,x..letters[y],TEXT_ALIGN.CENTER,TEXT_ALIGN.CENTER) end end
+        for _,v in pairs(entPositions) do render.setColor(v[2]) render.drawCircle(v[1].x,v[1].y,2) end
+        render.selectRenderTarget()
+        
+        render.setRenderTargetTexture("radar-screen-table")
+        render.setColor(Color(255,255,255)) --if i dont do this then the rt screen is tinted
+        render.drawTexturedRectFast(0, 0, 512, 512)
+        end)
+end
